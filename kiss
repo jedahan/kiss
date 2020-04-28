@@ -153,7 +153,7 @@ pkg_list() {
 
     # Change directories to the database. This allows us to
     # avoid having to 'basename' each path.
-    cd "$sys_db" 2>/dev/null
+    cd "$KISS_ROOT/apps" 2>/dev/null
 
     # Optional arguments can be passed to check for specific
     # packages. If no arguments are passed, list all.
@@ -390,7 +390,7 @@ pkg_fixdeps() {
 
     # Go to the directory containing the built package to
     # simplify path building.
-    cd "$pkg_dir/$1/$pkg_db/$1"
+    cd "$pkg_dir/$1"
 
     # Generate a list of all installed manifests.
     set +f; set -f -- "$sys_db/"*/manifest
@@ -462,7 +462,7 @@ pkg_manifest() (
     # sed:  Remove the first character in each line (./dir -> /dir) and
     #       remove all lines which only contain '.'.
     find . -type d -exec printf '%s/\n' {} + -o -print |
-        sort -r | sed '/^\.\/$/d;ss.ss' > "${2:-$pkg_dir}/$1/$pkg_db/$1/manifest"
+        sort -r | sed '/^\.\/$/d;ss.ss' > "${2:-$pkg_dir}/$1/manifest"
 )
 
 pkg_etcsums() (
@@ -561,7 +561,7 @@ pkg_build() {
 
         # Install built packages to a directory under the package name
         # to avoid collisions with other packages.
-        mkdir -p "$pkg_dir/$pkg/$pkg_db" && cd "$mak_dir/$pkg"
+        cd "$mak_dir/$pkg"
 
         log "$pkg" "Starting build"
         run_hook pre-build "$pkg" "$pkg_dir/$pkg"
@@ -583,7 +583,7 @@ pkg_build() {
 
         # Copy the repository files to the package directory.
         # This acts as the database entry.
-        cp -LRf "$repo_dir" "$pkg_dir/$pkg/$pkg_db/"
+        cp -LRf "$repo_dir" "$pkg_dir/"
 
         # We never ever want this. Let's end the endless conflicts
         # and remove it. This will be the only exception for a
@@ -595,7 +595,7 @@ pkg_build() {
 
         # Create the manifest file early and make it empty.
         # This ensures that the manifest is added to the manifest.
-        : > "$pkg_dir/$pkg/$pkg_db/$pkg/manifest"
+        : > "$pkg_dir/$pkg/manifest"
 
         # If the package contains '/etc', add a file called
         # 'etcsums' to the manifest. See comment directly above.
@@ -1026,7 +1026,7 @@ pkg_install() {
     # that determines a valid KISS package from an invalid one.
     # This should be a fine assumption to make in 99.99% of cases.
     read -r version release 2>/dev/null \
-        < "$KISS_ROOT/apps/.$pkg_name/$pkg_db/$pkg_name/version" ||
+        < "$KISS_ROOT/apps/.$pkg_name/version" ||
         die "'${tar_file##*/}' is not a valid KISS package"
 
     # We now know the version, rename the directory to include it.
