@@ -1011,7 +1011,8 @@ pkg_install() {
         die "package has not been built, run 'kiss b pkg'"
     fi
 
-    mkdir -p "$tar_dir/$pkg_name"
+    mkdir -p "$KISS_ROOT/apps/.$pkg_name"
+
     log "$pkg_name" "Extracting $tar_file"
 
     # The tarball is extracted to a temporary directory where its
@@ -1019,37 +1020,42 @@ pkg_install() {
     #
     # Running this step as soon as possible allows us to also check
     # the validity of the tarball and bail out early if needed.
-    decompress "$tar_file" | "$tar" pxf - -C "$tar_dir/$pkg_name"
+    decompress "$tar_file" | "$tar" pxf - -C "$KISS_ROOT/apps/.$pkg_name"
 
-    # Naively assume that the existence of a manifest file is all
+    # Naively assume that the existence of a version file is all
     # that determines a valid KISS package from an invalid one.
     # This should be a fine assumption to make in 99.99% of cases.
-    [ -f "$tar_dir/$pkg_name/$pkg_db/$pkg_name/manifest" ] ||
+    read -r version release 2>/dev/null \
+        < "$KISS_ROOT/apps/.$pkg_name/$pkg_db/$pkg_name/version" ||
         die "'${tar_file##*/}' is not a valid KISS package"
+
+    # We now know the version, rename the directory to include it.
+    mv -f "$KISS_ROOT/apps/.$pkg_name" \
+          "$KISS_ROOT/apps/$pkg_name@$version-$release"
 
     # Ensure that the tarball's manifest is correct by checking that
     # each file and directory inside of it actually exists.
-    [ "$KISS_FORCE" = 1 ] || {
-        log "$pkg_name" "Checking that manifest is valid"
-        while read -r line; do 
-            [ -h "$tar_dir/$pkg_name/$line" ] ||
-            [ -e "$tar_dir/$pkg_name/$line" ] || 
-                die "File $line missing from tarball but mentioned in manifest"
-        done < "$tar_dir/$pkg_name/$pkg_db/$pkg_name/manifest"
+    # [ "$KISS_FORCE" = 1 ] || {
+    #     log "$pkg_name" "Checking that manifest is valid"
+    #     while read -r line; do 
+    #         [ -h "$tar_dir/$pkg_name/$line" ] ||
+    #         [ -e "$tar_dir/$pkg_name/$line" ] || 
+    #             die "File $line missing from tarball but mentioned in manifest"
+    #     done < "$tar_dir/$pkg_name/$pkg_db/$pkg_name/manifest"
 
-        log "$pkg_name" "Checking that all dependencies are installed"
-        [ -f "$tar_dir/$pkg_name/$pkg_db/$pkg_name/depends" ] &&
-            while read -r dep dep_type || [ "$dep" ]; do
-                [ "${dep##\#*}" ] || continue
-                [ "$dep_type" ]   || pkg_list "$dep" >/dev/null ||
-                    install_dep="$install_dep'$dep', "
-            done < "$tar_dir/$pkg_name/$pkg_db/$pkg_name/depends"
+    #     log "$pkg_name" "Checking that all dependencies are installed"
+    #     [ -f "$tar_dir/$pkg_name/$pkg_db/$pkg_name/depends" ] &&
+    #         while read -r dep dep_type || [ "$dep" ]; do
+    #             [ "${dep##\#*}" ] || continue
+    #             [ "$dep_type" ]   || pkg_list "$dep" >/dev/null ||
+    #                 install_dep="$install_dep'$dep', "
+    #         done < "$tar_dir/$pkg_name/$pkg_db/$pkg_name/depends"
 
-        [ "$install_dep" ] && die "$1" "Package requires ${install_dep%, }"
-    }
+    #     [ "$install_dep" ] && die "$1" "Package requires ${install_dep%, }"
+    # }
 
-    run_hook pre-install "$pkg_name" "$tar_dir/$pkg_name"
-    pkg_conflicts "$pkg_name"
+    # run_hook pre-install "$pkg_name" "$tar_dir/$pkg_name"
+    # pkg_conflicts "$pkg_name"
 
     log "$pkg_name" "Installing package incrementally"
 
@@ -1058,6 +1064,7 @@ pkg_install() {
     # an incomplete package installed.
     trap '' INT
 
+    exit 1
     # If the package is already installed (and this is an upgrade) make a
     # backup of the manifest and etcsums files.
     cp -f "$sys_db/$pkg_name/manifest" "$mak_dir/m" 2>/dev/null ||:
