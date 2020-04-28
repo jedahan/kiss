@@ -369,7 +369,7 @@ pkg_strip() {
     # NOTE: 'readelf' is used in place of 'file' as
     #       it allows us to remove 'file' from the
     #       core repositories altogether.
-    find "$pkg_dir/$1" -type f | while read -r file; do
+    find "$pkg_dir/$1/sys" -type f | while read -r file; do
         case $(readelf -h "$file") in
             *" DYN "*)  strip_opt=unneeded ;;
             *" EXEC "*) strip_opt=all ;;
@@ -390,7 +390,7 @@ pkg_fixdeps() {
 
     # Go to the directory containing the built package to
     # simplify path building.
-    cd "$pkg_dir/$1"
+    cd "$pkg_dir/$1/sys"
 
     # Generate a list of all installed manifests.
     set +f; set -f -- "$sys_db/"*/manifest
@@ -407,7 +407,7 @@ pkg_fixdeps() {
     # Get a list of binaries and libraries, false files
     # will be found, however it's faster to get 'ldd' to check
     # them anyway than to filter them out.
-    find "$pkg_dir/${PWD##*/}/" -type f 2>/dev/null |
+    find "$pkg_dir/${PWD##*/}/sys" -type f 2>/dev/null |
 
     while read -r file; do
         # Run 'ldd' on the file and parse each line. The code
@@ -454,7 +454,7 @@ pkg_manifest() (
 
     # This function runs as a sub-shell to avoid having to 'cd' back to the
     # prior directory before being able to continue.
-    cd "${2:-$pkg_dir}/$1"
+    cd "${2:-$pkg_dir}/$1/sys"
 
     # find: Print all files and directories and append '/' to directories.
     # sort: Sort the output in *reverse*. Directories appear *after* their
@@ -472,9 +472,9 @@ pkg_etcsums() (
 
     # This function runs as a sub-shell to avoid having to 'cd' back to the
     # prior directory before being able to continue.
-    cd "$pkg_dir/$1/etc" 2>/dev/null || return 0; cd ..
+    cd "$pkg_dir/$1/sys/etc" 2>/dev/null || return 0; cd ..
 
-    find etc -type f -exec sha256sum {} + > "$pkg_dir/$1/$pkg_db/$1/etcsums"
+    find etc -type f -exec sha256sum {} + > "$pkg_dir/$1/etcsums"
 )
 
 pkg_tar() {
@@ -564,15 +564,15 @@ pkg_build() {
         cd "$mak_dir/$pkg"
 
         log "$pkg" "Starting build"
-        run_hook pre-build "$pkg" "$pkg_dir/$pkg"
+        run_hook pre-build "$pkg" "$pkg_dir/$pkg/sys"
 
         # Call the build script, log the output to the terminal
         # and to a file. There's no PIPEFAIL in POSIX shelll so
         # we must resort to tricks like killing the script ourselves.
-        { "$repo_dir/build" "$pkg_dir/$pkg" 2>&1 || {
+        { "$repo_dir/build" "$pkg_dir/$pkg/sys" 2>&1 || {
             log "$pkg" "Build failed"
             log "$pkg" "Log stored to $log_dir/$pkg-$time-$pid"
-            run_hook build-fail "$pkg" "$pkg_dir/$pkg"
+            run_hook build-fail "$pkg" "$pkg_dir/$pkg/sys"
             pkg_clean
             kill 0
         } } | tee "$log_dir/$pkg-$time-$pid"
@@ -1035,24 +1035,24 @@ pkg_install() {
 
     # Ensure that the tarball's manifest is correct by checking that
     # each file and directory inside of it actually exists.
-    # [ "$KISS_FORCE" = 1 ] || {
-    #     log "$pkg_name" "Checking that manifest is valid"
-    #     while read -r line; do 
-    #         [ -h "$tar_dir/$pkg_name/$line" ] ||
-    #         [ -e "$tar_dir/$pkg_name/$line" ] || 
-    #             die "File $line missing from tarball but mentioned in manifest"
-    #     done < "$tar_dir/$pkg_name/$pkg_db/$pkg_name/manifest"
+    [ "$KISS_FORCE" = 1 ] || {
+        log "$pkg_name" "Checking that manifest is valid"
+        while read -r line; do 
+            [ -h "$KISS_ROOT/apps/$pkg_name@$version-$release/sys/$line" ] ||
+            [ -e "$KISS_ROOT/apps/$pkg_name@$version-$release/sys/$line" ] || 
+                die "File $line missing from tarball but mentioned in manifest"
+        done < "$KISS_ROOT/apps/$pkg_name@$version-$release/manifest"
 
-    #     log "$pkg_name" "Checking that all dependencies are installed"
-    #     [ -f "$tar_dir/$pkg_name/$pkg_db/$pkg_name/depends" ] &&
-    #         while read -r dep dep_type || [ "$dep" ]; do
-    #             [ "${dep##\#*}" ] || continue
-    #             [ "$dep_type" ]   || pkg_list "$dep" >/dev/null ||
-    #                 install_dep="$install_dep'$dep', "
-    #         done < "$tar_dir/$pkg_name/$pkg_db/$pkg_name/depends"
+        log "$pkg_name" "Checking that all dependencies are installed"
+        [ -f "$KISS_ROOT/apps/$pkg_name@$version-$release/depends" ] &&
+            while read -r dep dep_type || [ "$dep" ]; do
+                [ "${dep##\#*}" ] || continue
+                [ "$dep_type" ]   || pkg_list "$dep" >/dev/null ||
+                    install_dep="$install_dep'$dep', "
+            done < "$KISS_ROOT/apps/$pkg_name@$version-$release/depends"
 
-    #     [ "$install_dep" ] && die "$1" "Package requires ${install_dep%, }"
-    # }
+        [ "$install_dep" ] && die "$1" "Package requires ${install_dep%, }"
+    }
 
     # run_hook pre-install "$pkg_name" "$tar_dir/$pkg_name"
     # pkg_conflicts "$pkg_name"
